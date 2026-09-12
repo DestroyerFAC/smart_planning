@@ -32,20 +32,43 @@ serveur, aucune donnée qui part ailleurs.
 
 ### 1. Publier l'application
 
-**Une seule manipulation, à faire une fois :**
+Le site est publié sur **Cloudflare Workers**, automatiquement à chaque push
+sur la branche par défaut.
 
-1. Sur GitHub, ouvre **Settings → Pages**.
-2. Sous **Source**, choisis **GitHub Actions**.
-3. Va dans **Actions → Déploiement GitHub Pages → Run workflow**.
+**Une seule manipulation, à faire une fois :** donner à GitHub le droit de
+déployer sur ton compte Cloudflare.
 
-Le site apparaît ensuite sur
-`https://<ton-compte>.github.io/smart_planning/`, et **chaque push sur la
-branche par défaut le reconstruit et le republie automatiquement**.
+1. Sur **dash.cloudflare.com** → icône de profil → **API Tokens** →
+   **Create Token** → modèle **Edit Cloudflare Workers** → **Continue** →
+   **Create Token**. Copie le jeton (il n'est affiché qu'une fois).
+2. Sur GitHub : **Settings → Secrets and variables → Actions →
+   New repository secret**.
+   Nom : `CLOUDFLARE_API_TOKEN`, valeur : le jeton copié.
+3. **Actions → Déploiement Cloudflare Workers → Run workflow.**
 
-> Cette étape ne peut pas être automatisée : le jeton d'un workflow GitHub
-> Actions a le droit de configurer un site Pages, mais pas d'en créer un
-> (l'API répond « Resource not accessible by integration »). Tant qu'elle
-> n'est pas faite, le job échoue sur « Get Pages site failed ».
+L'URL publique s'affiche dans le résumé du job, sous la forme
+`https://smart-planning.<ton-sous-domaine>.workers.dev`.
+
+> Si ton jeton donne accès à plusieurs comptes Cloudflare, ajoute un second
+> secret `CLOUDFLARE_ACCOUNT_ID` (visible dans l'URL du tableau de bord).
+
+### Déployer depuis ta machine (optionnel)
+
+```bash
+npx wrangler login
+npm run deploy
+```
+
+### GitHub Pages (solution de repli)
+
+Le workflow **Déploiement GitHub Pages** existe toujours, en déclenchement
+manuel. Pour t'en servir : **Settings → Pages → Source : GitHub Actions**,
+puis lance-le depuis l'onglet Actions. Il construit avec le sous-chemin
+`/smart_planning/` qu'impose Pages.
+
+> Cette activation ne peut pas être automatisée : le jeton d'un workflow a le
+> droit de configurer un site Pages, mais pas d'en créer un (l'API répond
+> « Resource not accessible by integration »).
 
 ### 2. Obtenir une clé Groq
 
@@ -105,12 +128,15 @@ autre projet, qui suppose un Mac ou un service de build.
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173/smart_planning/
-npm run build      # vérification des types puis build de production
+npm run dev        # http://localhost:5173/
+npm run build      # vérification des types, tests, puis build de production
 npm run preview    # sert le build tel qu'il sera en ligne
+npm run deploy     # build puis publication sur Cloudflare Workers
 ```
 
-Pour un hébergement à la racine d'un domaine : `APP_BASE=/ npm run build`.
+Le site est construit pour la **racine** par défaut, ce qu'attendent Cloudflare
+Workers et un domaine personnalisé. GitHub Pages impose un sous-chemin :
+`APP_BASE=/smart_planning/ npm run build` (son workflow le fait déjà).
 
 ### Organisation du code
 
@@ -125,6 +151,7 @@ src/
   ui/               Vues calendrier, dialogues, état applicatif
 scripts/
   make-icons.py     Génère les icônes PWA (PNG écrit à la main, zéro dépendance)
+wrangler.jsonc      Worker « assets-only » : Cloudflare sert dist/, sans code serveur
 ```
 
 ### Deux décisions structurantes

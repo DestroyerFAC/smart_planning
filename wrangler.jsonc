@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  // Worker « assets-only » : aucun script serveur, Cloudflare sert
+  // directement le contenu de dist/. Il n'y a rien à exécuter côté serveur —
+  // toute l'application tourne dans le navigateur — donc ajouter un Worker
+  // d'entrée n'apporterait qu'une latence et une surface de bug en plus.
+  "name": "smart-planning",
+  "compatibility_date": "2026-09-12",
+
+  "assets": {
+    "directory": "./dist",
+
+    // Indispensable pour une application monopage : sans cette option, une
+    // URL autre que « / » renvoie un 404 au lieu de laisser le routage
+    // côté client s'en charger.
+    "not_found_handling": "single-page-application"
+  },
+
+  // Analytics côté Cloudflare. Sans effet sur les données de l'application,
+  // qui ne quittent jamais le navigateur.
+  "observability": {
+    "enabled": true
+  }
+}

@@ -1,0 +1,80 @@
+name: Déploiement Cloudflare Workers
+
+# Publication principale du site. Se déclenche sur tous les pushes ; c'est la
+# condition `if` du job qui restreint le déploiement à la branche par défaut,
+# quel que soit son nom (voir deploy.yml pour le détail de ce choix).
+on:
+  push:
+  workflow_dispatch:
+
+# Un seul déploiement à la fois, mais on annule celui en cours si un nouveau
+# push arrive : contrairement à GitHub Pages, publier un Worker est atomique,
+# donc interrompre une version déjà dépassée ne laisse rien d'incohérent.
+concurrency:
+  group: cloudflare-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Le secret est lu via `env` et jamais interpolé dans le corps du script :
+      # une interpolation directe l'exposerait au journal en cas d'erreur de
+      # shell, et ouvrirait une injection si sa valeur contenait des
+      # métacaractères.
+      - name: Vérifier la présence du jeton
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Le secret CLOUDFLARE_API_TOKEN est absent. Crée un jeton sur dash.cloudflare.com (modèle « Edit Cloudflare Workers »), puis ajoute-le dans Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Construire le site
+        # `npm run build` enchaîne vérification des types, tests et build :
+        # rien n'est déployé si l'un des trois échoue.
+        #
+        # Pas de APP_BASE ici : le Worker sert le site à la racine, ce qui est
+        # déjà la valeur par défaut de vite.config.ts.
+        run: npm run build
+
+      - name: Déployer sur Cloudflare
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        env:
+          # Utile seulement si le jeton donne accès à plusieurs comptes ; une
+          # valeur vide est ignorée par wrangler.
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      # Affiche l'URL publique directement dans le résumé du job, pour ne pas
+      # avoir à la chercher dans le tableau de bord Cloudflare.
+      - name: Publier l'URL dans le résumé
+        if: success()
+        env:
+          URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: |
+          {
+            echo "## Site déployé"
+            echo ""
+            if [ -n "$URL" ]; then
+              echo "$URL"
+            else
+              echo "Déploiement réussi. L'URL est visible dans le tableau de bord Cloudflare (Workers & Pages → smart-planning)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

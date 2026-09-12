@@ -2,15 +2,17 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// `base` doit correspondre au chemin de publication GitHub Pages
-// (https://<user>.github.io/smart_planning/).
+// Chemin de publication.
 //
-// La meme valeur est utilisee en dev, en preview ET en build : `vite preview`
+// Racine par defaut : c'est ce qu'attendent Cloudflare Workers, un domaine
+// personnalise et la preview locale. GitHub Pages, qui sert depuis
+// https://<user>.github.io/<depot>/, surcharge APP_BASE dans son workflow.
+//
+// La meme valeur sert en dev, en preview ET en build : `vite preview`
 // s'execute avec command === 'serve', donc une base conditionnelle servirait
-// les fichiers a la racine alors qu'ils referencent /smart_planning/, et la
+// les fichiers a la racine alors qu'ils referencent un sous-chemin, et la
 // preview afficherait une page blanche.
-// Pour un hebergement a la racine d'un domaine : APP_BASE=/ npm run build
-const BASE = process.env.APP_BASE ?? '/smart_planning/';
+const BASE = process.env.APP_BASE ?? '/';
 
 export default defineConfig(() => ({
   base: BASE,

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover : indispensable pour que les safe-area-inset CSS
+         renvoient autre chose que 0 sur iPhone a encoche. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+    />
+    <meta name="theme-color" content="#1a73e8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#202124" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="Ton planning et celui de tes collegues, extraits automatiquement d'une photo ou d'un PDF." />
+
+    <!-- Mode plein ecran une fois ajoutee a l'ecran d'accueil iOS. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Planning" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
+    <title>Smart Planning</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>Cette application necessite JavaScript.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

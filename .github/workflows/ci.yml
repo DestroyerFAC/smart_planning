@@ -1,0 +1,31 @@
+name: Vérifications
+
+# Sur les pull requests et sur les branches de travail : le workflow de
+# déploiement ne se déclenche que sur `main`, donc sans ce job une régression
+# ne serait détectée qu'une fois fusionnée.
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Vérification des types
+        run: npm run typecheck
+
+      - name: Tests unitaires
+        run: npm test
+
+      - name: Build de production
+        run: npm run build

@@ -1,0 +1,60 @@
+name: Déploiement GitHub Pages
+
+# Publie l'application à chaque push sur la branche principale.
+# `workflow_dispatch` permet aussi un déclenchement manuel depuis l'onglet
+# Actions, utile pour republier sans avoir à créer un commit vide.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  # Requis par actions/deploy-pages, qui s'authentifie auprès de GitHub Pages
+  # par OIDC plutôt qu'avec un jeton stocké.
+  id-token: write
+
+# Une seule publication à la fois. `cancel-in-progress: false` laisse le
+# déploiement en cours se terminer : l'interrompre peut laisser le site
+# dans un état partiel.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` et non `npm install` : installation reproductible à partir du
+      # package-lock.json, sans mise à jour silencieuse des dépendances.
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Construire le site
+        # Le chemin de base doit correspondre au nom du dépôt, car GitHub Pages
+        # sert le site depuis https://<utilisateur>.github.io/<dépôt>/
+        run: APP_BASE="/${GITHUB_REPOSITORY#*/}/" npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

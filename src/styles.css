@@ -1,0 +1,693 @@
+/*
+ * Design system de Smart Planning.
+ *
+ * Pensé mobile d'abord : la cible est un iPhone tenu à une main, souvent au
+ * travail. D'où les zones tactiles à 44 px (minimum recommandé par Apple), la
+ * navigation en bas d'écran là où le pouce arrive, et le respect des
+ * safe-area-inset pour ne pas passer sous l'encoche ou la barre d'accueil.
+ */
+
+:root {
+  --blue: #1a73e8;
+  --blue-soft: #e8f0fe;
+  --red: #d93025;
+  --green: #1e8e3e;
+  --amber: #f9ab00;
+
+  --bg: #ffffff;
+  --bg-subtle: #f8f9fa;
+  --bg-raised: #ffffff;
+  --border: #dadce0;
+  --border-soft: #e8eaed;
+  --text: #202124;
+  --text-muted: #5f6368;
+  --text-faint: #80868b;
+  --overlay: rgb(32 33 36 / 55%);
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 3px rgb(60 64 67 / 20%), 0 4px 12px rgb(60 64 67 / 12%);
+
+  --tap: 44px;
+  --header-h: 56px;
+  --nav-h: 60px;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --blue: #8ab4f8;
+    --blue-soft: #1f3247;
+    --red: #f28b82;
+    --green: #81c995;
+    --amber: #fdd663;
+
+    --bg: #202124;
+    --bg-subtle: #292a2d;
+    --bg-raised: #2d2e31;
+    --border: #5f6368;
+    --border-soft: #3c4043;
+    --text: #e8eaed;
+    --text-muted: #9aa0a6;
+    --text-faint: #80868b;
+    --overlay: rgb(0 0 0 / 65%);
+    --shadow: 0 1px 3px rgb(0 0 0 / 40%), 0 4px 12px rgb(0 0 0 / 30%);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 400 15px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Empêche le zoom involontaire au double-tap et le rebond de scroll iOS. */
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+/* Masque le focus au doigt, le conserve au clavier (accessibilité). */
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+:focus:not(:focus-visible) { outline: none; }
+
+/* ----------------------------------------------------------------- Layout */
+
+/*
+ * Flex plutôt que grid : la barre de filtre n'est rendue que lorsqu'il y a
+ * plusieurs personnes. Avec `grid-template-rows`, le nombre d'enfants varie
+ * et la piste `1fr` se retrouve attribuée au mauvais élément, qui s'étire.
+ * En colonne flex, seul `.main` porte le `flex: 1` et absorbe l'espace.
+ */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.topbar, .filterbar, .bottomnav { flex: 0 0 auto; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--header-h);
+  padding: var(--safe-top) 8px 0;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg);
+}
+
+.topbar__title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 19px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* En francais seul le premier mot prend une majuscule : `capitalize`
+   produirait "Samedi 12 Septembre". */
+.topbar__title::first-letter, .agenda__date::first-letter { text-transform: uppercase; }
+
+.agenda__date { color: var(--text-muted); font-size: 13px; }
+
+.iconbtn {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 20px;
+  line-height: 1;
+}
+.iconbtn:hover { background: var(--bg-subtle); }
+.iconbtn:disabled { opacity: .35; cursor: default; }
+.iconbtn--accent { color: var(--blue); }
+
+.main {
+  flex: 1 1 auto;
+  /* min-height: 0 est indispensable : sans lui un enfant flex refuse de
+     rétrécir sous sa taille de contenu et le scroll interne ne s'active pas. */
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.bottomnav {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg);
+  padding-bottom: var(--safe-bottom);
+}
+
+.bottomnav__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: var(--nav-h);
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.bottomnav__item[aria-current='true'] { color: var(--blue); font-weight: 600; }
+.bottomnav__icon { font-size: 20px; line-height: 1; }
+
+/* ------------------------------------------------------------ Vue Mois */
+
+.month__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.month__weekday {
+  padding: 6px 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.month__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.month__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-height: 78px;
+  padding: 4px 2px;
+  border: 0;
+  border-right: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg);
+  text-align: center;
+}
+.month__cell:nth-child(7n) { border-right: 0; }
+.month__cell--outside { background: var(--bg-subtle); }
+.month__cell--outside .month__daynum { color: var(--text-faint); }
+.month__cell--selected { background: var(--blue-soft); }
+
+.month__daynum {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.month__cell--today .month__daynum { background: var(--blue); color: #fff; font-weight: 600; }
+
+.month__chips {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+
+.chip {
+  overflow: hidden;
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.chip--ghost { background: transparent !important; color: var(--text-muted); }
+
+.month__more { color: var(--text-faint); font-size: 10px; }
+
+/* --------------------------------------------------------- Vue Semaine */
+
+/*
+ * Gouttière des heures. Déclarée une seule fois : l'en-tête et le corps
+ * doivent partager exactement la même définition de colonnes, sinon les jours
+ * ne s'alignent plus avec leurs blocs horaires.
+ */
+.week { --week-gutter: 42px; }
+
+/*
+ * Un SEUL conteneur collant. Rendre l'en-tête des jours et la bande
+ * « journée entière » collants séparément à top: 0 les superposerait,
+ * et la bande masquerait les jours.
+ */
+.week__sticky {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg);
+}
+
+.week__header {
+  display: grid;
+  /* minmax(0, 1fr) et non minmax(64px, 1fr) : à 64px minimum, sept colonnes
+     plus la gouttière dépassent la largeur d'un iPhone et imposent un
+     défilement horizontal pénible. Les colonnes se partagent la place. */
+  grid-template-columns: var(--week-gutter) repeat(7, minmax(0, 1fr));
+}
+
+.week__allday {
+  display: grid;
+  grid-template-columns: var(--week-gutter) repeat(7, minmax(0, 1fr));
+  border-top: 1px dashed var(--border-soft);
+}
+.week__allday-cell { display: grid; gap: 2px; padding: 4px 2px; min-width: 0; }
+.week__allday-label {
+  padding-top: 5px;
+  color: var(--text-faint);
+  font-size: 10px;
+  text-align: right;
+  padding-right: 6px;
+}
+
+.week__daybtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 5px 0;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.week__daynum {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--text);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.week__daybtn--today .week__daynum { background: var(--blue); color: #fff; font-weight: 600; }
+
+.week__body {
+  display: grid;
+  grid-template-columns: var(--week-gutter) repeat(7, minmax(0, 1fr));
+  position: relative;
+}
+
+.week__hours { position: relative; }
+.week__hour {
+  height: 48px;
+  padding-right: 6px;
+  color: var(--text-faint);
+  font-size: 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  /* Décale le libellé pour qu'il s'aligne sur le trait, pas sur la case. */
+  transform: translateY(-6px);
+}
+
+.week__col {
+  position: relative;
+  border-left: 1px solid var(--border-soft);
+  /* Trame horaire dessinée en CSS : aucun DOM pour 24 lignes × 7 colonnes. */
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--border-soft) 0 1px,
+    transparent 1px 48px
+  );
+}
+
+.week__event {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  overflow: hidden;
+  /* Reinitialise la bordure par defaut du <button>, sinon un liseré sombre
+     entoure chaque bloc et masque la couleur de la personne. */
+  border: 0;
+  padding: 2px 3px;
+  /* Liseré discret : à 25 % d'opacité le trait noir écrasait la couleur
+     de la personne, qui est justement l'information à lire. */
+  border-left: 2px solid rgb(0 0 0 / 12%);
+  border-radius: 3px;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.25;
+  text-align: left;
+}
+.week__event-title { font-weight: 600; }
+
+/* ------------------------------------------------------------- Vue Jour */
+
+.agenda { padding: 8px 12px 24px; }
+
+.agenda__empty {
+  padding: 48px 24px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.agenda__row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 10px;
+  align-items: start;
+  width: 100%;
+  padding: 10px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  background: transparent;
+  text-align: left;
+}
+
+.agenda__time {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.agenda__name { font-weight: 500; }
+.agenda__meta { color: var(--text-muted); font-size: 13px; }
+
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: baseline;
+}
+
+/* --------------------------------------------------------- Vue Personnes */
+
+.people { padding: 8px 12px 24px; }
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  background: transparent;
+  text-align: left;
+}
+
+.person__avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.person__body { flex: 1; min-width: 0; }
+.person__name { display: block; font-weight: 500; }
+.person__sub { display: block; color: var(--text-muted); font-size: 13px; }
+
+.badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- Filtre */
+
+.filterbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  scrollbar-width: none;
+}
+.filterbar::-webkit-scrollbar { display: none; }
+
+.filterchip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.filterchip[aria-pressed='true'] {
+  border-color: transparent;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-weight: 600;
+}
+
+/* ----------------------------------------------------------------- Modal */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  background: var(--overlay);
+  animation: fade .15s ease;
+}
+@media (min-width: 600px) { .modal-backdrop { align-items: center; justify-content: center; } }
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 520px;
+  max-height: 90dvh;
+  border-radius: 16px 16px 0 0;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow);
+  animation: slideup .2s cubic-bezier(.2, .8, .3, 1);
+}
+@media (min-width: 600px) { .modal { border-radius: 16px; } }
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px 12px 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.modal__title { flex: 1; margin: 0; font-size: 17px; font-weight: 600; }
+
+.modal__body {
+  overflow-y: auto;
+  padding: 16px;
+  padding-bottom: calc(16px + var(--safe-bottom));
+}
+
+@keyframes fade { from { opacity: 0 } }
+@keyframes slideup { from { transform: translateY(16px); opacity: 0 } }
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop, .modal { animation: none; }
+}
+
+/* ------------------------------------------------------------ Formulaire */
+
+.field { margin-bottom: 16px; }
+.field__label { display: block; margin-bottom: 5px; font-size: 13px; font-weight: 600; }
+.field__hint { margin-top: 5px; color: var(--text-muted); font-size: 12px; }
+
+.input, .select {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  /* 16px minimum : en deçà, iOS Safari zoome à la mise au point du champ. */
+  font-size: 16px;
+}
+.input:focus, .select:focus { border-color: var(--blue); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap);
+  padding: 10px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 500;
+}
+.btn--primary { border-color: transparent; background: var(--blue); color: #fff; }
+@media (prefers-color-scheme: dark) { .btn--primary { color: #202124; } }
+.btn--danger { border-color: transparent; background: var(--red); color: #fff; }
+.btn--block { width: 100%; }
+.btn:disabled { opacity: .5; cursor: default; }
+
+.btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.btnrow > .btn { flex: 1 1 140px; }
+
+/* --------------------------------------------------------------- Alertes */
+
+.alert {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-left: 4px solid var(--text-muted);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font-size: 14px;
+}
+.alert--error { border-left-color: var(--red); }
+.alert--success { border-left-color: var(--green); }
+.alert--warn { border-left-color: var(--amber); }
+.alert__title { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+.alert__hint { margin: 6px 0 0; color: var(--text-muted); font-size: 13px; }
+
+/* --------------------------------------------------------- Import / FAB */
+
+.fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--nav-h) + var(--safe-bottom) + 16px);
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 26px;
+  box-shadow: var(--shadow);
+}
+@media (prefers-color-scheme: dark) { .fab { color: #202124; } }
+
+.dropzone {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 28px 16px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  text-align: center;
+}
+.dropzone__icon { font-size: 32px; }
+.dropzone__hint { color: var(--text-muted); font-size: 13px; }
+
+.progress {
+  overflow: hidden;
+  height: 6px;
+  margin: 12px 0 6px;
+  border-radius: 999px;
+  background: var(--border-soft);
+}
+.progress__bar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--blue);
+  transition: width .25s ease;
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+
+/* ---------------------------------------------------------------- Divers */
+
+.stack > * + * { margin-top: 12px; }
+.muted { color: var(--text-muted); }
+.small { font-size: 13px; }
+.center { text-align: center; }
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.section-title {
+  margin: 20px 0 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.divider { height: 1px; margin: 16px 0; background: var(--border-soft); }
+
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.list-row__body { flex: 1; min-width: 0; }
+/* display: block sur des <span> : sans cela titre et sous-titre s'affichent
+   bout a bout sur la meme ligne au lieu de s'empiler. */
+.list-row__title { display: block; font-size: 14px; font-weight: 500; }
+.list-row__sub { display: block; color: var(--text-muted); font-size: 12px; }
+
+/* Cases a cocher : taille confortable au doigt et largeur non compressible. */
+input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--blue);
+}

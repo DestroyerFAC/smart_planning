@@ -1,11 +1,15 @@
 name: Déploiement GitHub Pages
 
-# Publie l'application à chaque push sur la branche principale.
-# `workflow_dispatch` permet aussi un déclenchement manuel depuis l'onglet
-# Actions, utile pour republier sans avoir à créer un commit vide.
+# Se déclenche sur tous les pushes ; c'est la condition `if` du job qui
+# restreint la publication à la branche par défaut.
+#
+# Filtrer ici par `branches: [main]` serait plus direct mais fragile : la
+# branche par défaut de ce dépôt ne s'appelle pas forcément `main`, et le
+# workflow ne partirait alors jamais. Comparer à
+# `github.event.repository.default_branch` fonctionne quel que soit son nom,
+# y compris après un renommage.
 on:
   push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -24,6 +28,9 @@ concurrency:
 
 jobs:
   build:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +46,9 @@ jobs:
         run: npm ci
 
       - name: Construire le site
+        # `npm run build` enchaîne vérification des types, tests et build : rien
+        # n'est publié si l'un des trois échoue.
+        #
         # Le chemin de base doit correspondre au nom du dépôt, car GitHub Pages
         # sert le site depuis https://<utilisateur>.github.io/<dépôt>/
         run: APP_BASE="/${GITHUB_REPOSITORY#*/}/" npm run build

@@ -1,15 +1,17 @@
 name: Vérifications
 
-# Sur les pull requests et sur les branches de travail : le workflow de
-# déploiement ne se déclenche que sur `main`, donc sans ce job une régression
-# ne serait détectée qu'une fois fusionnée.
+# Couvre les pull requests et les branches de travail. La branche par défaut
+# est déjà vérifiée par le workflow de déploiement, qui lance les mêmes
+# contrôles avant de publier : on l'exclut ici pour ne pas tout faire deux fois.
 on:
   pull_request:
   push:
-    branches-ignore: [main]
 
 jobs:
   verify:
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.ref_name != github.event.repository.default_branch
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -8,6 +8,21 @@
   "name": "smart-planning",
   "compatibility_date": "2026-09-12",
 
+  // Construit le site avant de le publier.
+  //
+  // Sans cette étape, `wrangler deploy` échoue sur « assets.directory does
+  // not exist » partout où dist/ n'a pas été généré au préalable : c'est le
+  // cas de Cloudflare Workers Builds, qui installe les dépendances puis
+  // lance directement la commande de déploiement. La placer ici plutôt que
+  // dans le tableau de bord Cloudflare la rend indissociable du dépôt : elle
+  // survit à une reconnexion de l'intégration Git ou à un nouveau clone.
+  //
+  // `npm run build` enchaîne vérification des types, tests et build : rien
+  // n'est publié si l'un des trois échoue.
+  "build": {
+    "command": "npm run build"
+  },
+
   "assets": {
     "directory": "./dist",
 

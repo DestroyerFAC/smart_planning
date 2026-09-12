@@ -32,42 +32,45 @@ serveur, aucune donnée qui part ailleurs.
 
 ### 1. Publier l'application
 
-Le site est publié sur **Cloudflare Workers**, automatiquement à chaque push
-sur la branche par défaut.
+Le site est publié sur **Cloudflare Workers** par **Workers Builds**,
+l'intégration Git branchée côté Cloudflare : chaque push sur la branche par
+défaut reconstruit et republie le site. Rien à configurer dans GitHub, aucun
+jeton à gérer.
 
-**Une seule manipulation, à faire une fois :** donner à GitHub le droit de
-déployer sur ton compte Cloudflare.
+L'URL est de la forme `https://smart-planning.<ton-sous-domaine>.workers.dev`,
+visible dans **Workers et Pages → smart-planning**.
 
-1. Sur **dash.cloudflare.com** → icône de profil → **API Tokens** →
-   **Create Token** → modèle **Edit Cloudflare Workers** → **Continue** →
-   **Create Token**. Copie le jeton (il n'est affiché qu'une fois).
-2. Sur GitHub : **Settings → Secrets and variables → Actions →
-   New repository secret**.
-   Nom : `CLOUDFLARE_API_TOKEN`, valeur : le jeton copié.
-3. **Actions → Déploiement Cloudflare Workers → Run workflow.**
+**Le build est décrit dans `wrangler.jsonc`, pas dans le tableau de bord.**
+Le champ `build.command` y lance `npm run build` avant la publication. C'est
+volontaire : Workers Builds installe les dépendances puis exécute directement
+la commande de déploiement, donc sans cette étape `dist/` n'existe pas et le
+déploiement échoue sur « assets.directory does not exist ». En le plaçant dans
+le dépôt, la configuration survit à une reconnexion de l'intégration Git.
 
-L'URL publique s'affiche dans le résumé du job, sous la forme
-`https://smart-planning.<ton-sous-domaine>.workers.dev`.
-
-> Si ton jeton donne accès à plusieurs comptes Cloudflare, ajoute un second
-> secret `CLOUDFLARE_ACCOUNT_ID` (visible dans l'URL du tableau de bord).
+> Laisse donc le champ **Build command** vide dans les réglages Cloudflare :
+> le renseigner ferait construire le site deux fois. Seule la commande de
+> déploiement, `npx wrangler deploy`, est nécessaire.
 
 ### Déployer depuis ta machine (optionnel)
 
 ```bash
 npx wrangler login
-npm run deploy
+npm run deploy     # wrangler construit puis publie
 ```
 
-### GitHub Pages (solution de repli)
+### Solutions de repli (déclenchement manuel)
 
-Le workflow **Déploiement GitHub Pages** existe toujours, en déclenchement
-manuel. Pour t'en servir : **Settings → Pages → Source : GitHub Actions**,
-puis lance-le depuis l'onglet Actions. Il construit avec le sous-chemin
-`/smart_planning/` qu'impose Pages.
+Deux workflows GitHub Actions restent disponibles dans l'onglet **Actions**,
+en lancement manuel uniquement. Les laisser automatiques ferait déployer deux
+systèmes vers la même cible en même temps.
 
-> Cette activation ne peut pas être automatisée : le jeton d'un workflow a le
-> droit de configurer un site Pages, mais pas d'en créer un (l'API répond
+| Workflow | Pour quoi faire |
+| --- | --- |
+| **Déploiement Cloudflare Workers** | Si tu débranches l'intégration Git de Cloudflare. Demande un secret `CLOUDFLARE_API_TOKEN` (jeton « Edit Cloudflare Workers » créé sur dash.cloudflare.com), et `CLOUDFLARE_ACCOUNT_ID` si ton jeton couvre plusieurs comptes. |
+| **Déploiement GitHub Pages** | Hébergement de secours. Active d'abord **Settings → Pages → Source : GitHub Actions**. Construit avec le sous-chemin `/smart_planning/` qu'impose Pages. |
+
+> L'activation de Pages ne peut pas être automatisée : le jeton d'un workflow
+> a le droit de configurer un site Pages, mais pas d'en créer un (l'API répond
 > « Resource not accessible by integration »).
 
 ### 2. Obtenir une clé Groq

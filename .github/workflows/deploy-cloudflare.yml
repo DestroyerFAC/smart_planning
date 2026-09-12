@@ -1,10 +1,16 @@
 name: Déploiement Cloudflare Workers
 
-# Publication principale du site. Se déclenche sur tous les pushes ; c'est la
-# condition `if` du job qui restreint le déploiement à la branche par défaut,
-# quel que soit son nom (voir deploy.yml pour le détail de ce choix).
+# Déclenchement MANUEL uniquement.
+#
+# La publication automatique est assurée par Cloudflare Workers Builds, branché
+# directement sur le dépôt côté Cloudflare : il construit et déploie à chaque
+# push, sans jeton à gérer ici.
+#
+# Laisser ce workflow sur `push` ferait déployer DEUX systèmes vers le même
+# Worker au même moment — c'est le dernier arrivé qui gagnerait, de façon
+# imprévisible. Il est conservé comme solution de repli, utilisable si tu
+# débranches un jour l'intégration Git de Cloudflare.
 on:
-  push:
   workflow_dispatch:
 
 # Un seul déploiement à la fois, mais on annule celui en cours si un nouveau

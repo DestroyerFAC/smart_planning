@@ -1,17 +1,18 @@
 name: Vérifications
 
-# Couvre les pull requests et les branches de travail. La branche par défaut
-# est déjà vérifiée par le workflow de déploiement, qui lance les mêmes
-# contrôles avant de publier : on l'exclut ici pour ne pas tout faire deux fois.
+# Couvre toutes les branches et toutes les pull requests, branche par défaut
+# comprise.
+#
+# Plus aucun workflow GitHub ne se déclenche automatiquement sur la branche par
+# défaut depuis que Cloudflare Workers Builds assure la publication. Sans ce
+# job, un commit cassé n'afficherait aucun signal sur GitHub et il faudrait
+# aller lire les journaux de build côté Cloudflare pour s'en apercevoir.
 on:
   pull_request:
   push:
 
 jobs:
   verify:
-    if: >-
-      github.event_name == 'pull_request' ||
-      github.ref_name != github.event.repository.default_branch
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -32,18 +32,20 @@ serveur, aucune donnée qui part ailleurs.
 
 ### 1. Publier l'application
 
-Le dépôt se déploie tout seul sur GitHub Pages : le workflow active Pages
-lui-même au premier passage, il n'y a rien à configurer à la main.
+**Une seule manipulation, à faire une fois :**
 
-Chaque push sur la branche par défaut reconstruit et republie le site. Tu peux
-aussi le relancer depuis l'onglet **Actions → Déploiement GitHub Pages → Run
-workflow**.
+1. Sur GitHub, ouvre **Settings → Pages**.
+2. Sous **Source**, choisis **GitHub Actions**.
+3. Va dans **Actions → Déploiement GitHub Pages → Run workflow**.
 
-Le site apparaît sur `https://<ton-compte>.github.io/smart_planning/`.
+Le site apparaît ensuite sur
+`https://<ton-compte>.github.io/smart_planning/`, et **chaque push sur la
+branche par défaut le reconstruit et le republie automatiquement**.
 
-> Si le job échoue sur « Get Pages site failed », c'est que l'activation
-> automatique a été refusée : va alors dans **Settings → Pages** et choisis
-> **GitHub Actions** comme **Source**, puis relance le workflow.
+> Cette étape ne peut pas être automatisée : le jeton d'un workflow GitHub
+> Actions a le droit de configurer un site Pages, mais pas d'en créer un
+> (l'API répond « Resource not accessible by integration »). Tant qu'elle
+> n'est pas faite, le job échoue sur « Get Pages site failed ».
 
 ### 2. Obtenir une clé Groq
 

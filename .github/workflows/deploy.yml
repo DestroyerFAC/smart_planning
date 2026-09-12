@@ -53,13 +53,12 @@ jobs:
         # sert le site depuis https://<utilisateur>.github.io/<dépôt>/
         run: APP_BASE="/${GITHUB_REPOSITORY#*/}/" npm run build
 
-      # `enablement: true` active GitHub Pages via l'API si ce n'est pas déjà
-      # fait, et le configure en mode « GitHub Actions ». Sans cette option,
-      # l'étape échoue avec « Get Pages site failed » sur un dépôt neuf et
-      # impose un passage manuel par Settings → Pages.
+      # Pas de `enablement: true` : le GITHUB_TOKEN d'un workflow peut
+      # configurer un site Pages existant, mais pas en créer un — l'API
+      # répond « Resource not accessible by integration ». L'activation
+      # initiale se fait donc une seule fois dans Settings → Pages
+      # (Source : GitHub Actions), comme indiqué dans le README.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:

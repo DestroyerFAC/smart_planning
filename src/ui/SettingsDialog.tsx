@@ -8,7 +8,7 @@
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { Alert, ErrorAlert, Modal } from './components';
-import { SUGGESTED_VISION_MODELS, listModels } from '../ai/groq';
+import { SUGGESTED_VISION_MODELS, listModels, rankVisionModels } from '../ai/groq';
 import { buildIcs, downloadIcs } from '../export/ics';
 import {
   clearAllData,
@@ -78,11 +78,17 @@ function AiSettings(): ReactNode {
     }
 
     setTestResult('ok');
-    // On ne garde que les modeles plausibles pour de la vision : proposer des
+    // Classement par probabilite de savoir lire une image : proposer des
     // modeles audio ou texte seul ne ferait qu'induire en erreur.
-    const ids = result.value.map((model) => model.id);
-    const visionCapable = ids.filter((id) => /llama-4|vision|scout|maverick/i.test(id));
-    setModels(visionCapable.length > 0 ? visionCapable : ids);
+    const ranked = rankVisionModels(result.value.map((model) => model.id));
+    setModels(ranked);
+
+    // Le modele enregistre a disparu du catalogue : on le remplace d'office
+    // par le meilleur candidat, sinon le prochain import echouerait encore.
+    const best = ranked[0];
+    if (best !== undefined && !ranked.includes(settings.model)) {
+      void updateSettings({ model: best });
+    }
   };
 
   return (

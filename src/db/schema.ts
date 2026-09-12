@@ -46,9 +46,10 @@ export interface SmartPlanningDB extends DBSchema {
 
 export const DEFAULT_SETTINGS: Settings = {
   groqApiKey: '',
-  // Modele vision par defaut. Modifiable dans les reglages : Groq fait evoluer
-  // son catalogue, et l'app sait lister les modeles disponibles du compte.
-  model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+  // Modele vision de depart, simple point d'entree et non verite figee : Groq
+  // retire des modeles regulierement. S'il a disparu, l'import bascule seul
+  // sur un autre candidat du catalogue et enregistre le remplacant.
+  model: 'meta-llama/llama-4-maverick-17b-128e-instruct',
   proxyUrl: '',
   myPersonId: null,
   weekStartsOn: 1,

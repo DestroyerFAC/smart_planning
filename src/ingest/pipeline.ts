@@ -10,7 +10,7 @@ import { extractFromImage } from '../ai/groq';
 import { mergeExtractions } from '../ai/schema';
 import { prepareFile } from './files';
 import { buildImportPlan, resolvePeople } from './reconcile';
-import { commitImportPlan, getShiftsBetween, listPeople } from '../db/repo';
+import { commitImportPlan, getShiftsBetween, listPeople, saveSettings } from '../db/repo';
 import { todayISO } from '../lib/datetime';
 import { Err, Ok, appError } from '../types';
 import type { CleanExtraction } from '../ai/schema';
@@ -73,6 +73,12 @@ export async function importPlanningFile(
   const parts: CleanExtraction[] = [];
   const today = todayISO();
 
+  // Le modele peut changer en cours de route : si celui enregistre a disparu
+  // du catalogue Groq, `extractFromImage` bascule seul sur un remplacant. On
+  // le retient pour que les pages suivantes l'utilisent directement, au lieu
+  // de refaire la decouverte — et l'echec — a chaque page.
+  let activeModel = settings.model;
+
   for (const [index, image] of images.entries()) {
     if (signal?.aborted) return Err(appError('NETWORK', 'Analyse annulée.'));
     onProgress?.({ phase: 'analyzing', done: index, total: images.length });
@@ -82,14 +88,15 @@ export async function importPlanningFile(
       { todayISO: today, pageNumber: index + 1, pageCount: images.length, knownNames },
       {
         apiKey: settings.groqApiKey,
-        model: settings.model,
+        model: activeModel,
         proxyUrl: settings.proxyUrl,
         ...(signal ? { signal } : {}),
       },
     );
 
     if (extracted.ok) {
-      parts.push(extracted.value);
+      parts.push(extracted.value.extraction);
+      activeModel = extracted.value.modelUsed;
       continue;
     }
 
@@ -100,6 +107,16 @@ export async function importPlanningFile(
   }
 
   onProgress?.({ phase: 'analyzing', done: images.length, total: images.length });
+
+  // Repli de modele effectif : on l'enregistre pour que les imports suivants
+  // partent directement du bon, et on le dit plutot que de changer un reglage
+  // dans le dos de l'utilisateur.
+  if (activeModel !== settings.model) {
+    await saveSettings({ model: activeModel });
+    warnings.push(
+      `Le modèle « ${settings.model} » n’est plus disponible ; « ${activeModel} » l’a remplacé.`,
+    );
+  }
 
   if (parts.length === 0) {
     return Err(appError('EMPTY_EXTRACTION', 'Aucune page n’a pu être analysée.'));
@@ -128,7 +145,7 @@ export async function importPlanningFile(
     sourceName: name,
     sourceKind: kind,
     pageCount: images.length,
-    model: settings.model,
+    model: activeModel,
     rawResponse: JSON.stringify(extraction),
   });
 

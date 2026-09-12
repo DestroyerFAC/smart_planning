@@ -137,6 +137,8 @@ export type AppErrorCode =
   | 'RATE_LIMITED'
   | 'AUTH'
   | 'MODEL_ERROR'
+  /** Le modele demande n'existe plus au catalogue : declenche un repli automatique. */
+  | 'MODEL_NOT_FOUND'
   | 'INVALID_RESPONSE'
   | 'EMPTY_EXTRACTION'
   | 'FILE_TOO_LARGE'

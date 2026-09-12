@@ -18,11 +18,56 @@ import type { CleanExtraction } from './schema';
 
 const DEFAULT_BASE_URL = 'https://api.groq.com/openai/v1';
 
-/** Modeles vision connus, proposes en premier dans les reglages. */
+/** Modeles vision connus, proposes tant que le catalogue reel n'a pas ete lu. */
 export const SUGGESTED_VISION_MODELS: readonly string[] = [
-  'meta-llama/llama-4-scout-17b-16e-instruct',
   'meta-llama/llama-4-maverick-17b-128e-instruct',
+  'meta-llama/llama-4-scout-17b-16e-instruct',
 ] as const;
+
+/**
+ * Familles de modeles connues pour accepter des images, par ordre de
+ * preference. Le score sert a classer un catalogue INCONNU : Groq retire et
+ * ajoute des modeles regulierement, et coder en dur un identifiant garantit
+ * qu'il finira par renvoyer 404.
+ */
+const VISION_HINTS: readonly { readonly pattern: RegExp; readonly score: number }[] = [
+  { pattern: /maverick/i, score: 100 },
+  { pattern: /scout/i, score: 90 },
+  { pattern: /llama-?4/i, score: 80 },
+  { pattern: /vision/i, score: 70 },
+  { pattern: /llava|pixtral/i, score: 60 },
+  { pattern: /(^|[-/])vl([-.]|$)/i, score: 55 },
+  { pattern: /gemma-?3/i, score: 40 },
+];
+
+/** Familles qui ne traitent aucune image : audio, garde-fous, embeddings. */
+const NON_VISION = /whisper|tts|embed|rerank|guard|moderation|safety/i;
+
+function visionScore(id: string): number {
+  return VISION_HINTS.reduce(
+    (best, hint) => (hint.pattern.test(id) ? Math.max(best, hint.score) : best),
+    0,
+  );
+}
+
+/**
+ * Classe un catalogue de modeles du plus au moins probable pour la lecture
+ * d'images.
+ *
+ * Si aucun nom ne trahit une capacite vision, on renvoie quand meme les
+ * modeles restants plutot qu'une liste vide : l'heuristique peut ignorer une
+ * famille recente, et l'utilisateur reste libre de choisir.
+ */
+export function rankVisionModels(ids: readonly string[]): string[] {
+  const usable = ids.filter((id) => !NON_VISION.test(id));
+  const likely = usable
+    .map((id) => ({ id, score: visionScore(id) }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
+    .map((entry) => entry.id);
+
+  return likely.length > 0 ? likely : [...usable].sort();
+}
 
 const MAX_RETRIES = 3;
 /** Plafond du repli exponentiel, pour ne pas figer l'UI sur un 429 tenace. */
@@ -66,7 +111,7 @@ function networkError(cause: unknown): AppError {
 }
 
 /** Transforme une reponse HTTP en erreur, en recuperant le message de Groq. */
-async function httpError(response: Response): Promise<AppError> {
+async function httpError(response: Response, model?: string): Promise<AppError> {
   let detail = '';
   try {
     const body: unknown = await response.json();
@@ -88,6 +133,20 @@ async function httpError(response: Response): Promise<AppError> {
       return appError('FILE_TOO_LARGE', 'Image trop lourde pour l’API.', {
         hint: 'Recadre la photo sur le tableau, ou réduis sa définition.',
       });
+    case 404:
+      // Cas le plus frequent : un modele retire du catalogue. Signale par un
+      // code distinct pour que l'appelant tente un repli sur un autre modele
+      // plutot que d'abandonner.
+      return appError(
+        'MODEL_NOT_FOUND',
+        model === undefined
+          ? 'Ressource Groq introuvable.'
+          : `Le modèle « ${model} » n’est pas disponible sur ton compte.`,
+        {
+          hint: detail
+            || 'Ouvre Réglages → IA et touche « Tester la clé » pour choisir un modèle disponible.',
+        },
+      );
     case 429:
       return appError('RATE_LIMITED', 'Quota Groq atteint.', {
         hint: detail || 'Attends une minute avant de relancer l’analyse.',
@@ -173,7 +232,7 @@ async function postChat(
       }
     }
 
-    lastError = await httpError(response);
+    lastError = await httpError(response, options.model);
 
     // Seuls le quota et les pannes serveur meritent une nouvelle tentative :
     // reessayer un 401 ne ferait que retarder l'affichage de l'erreur.
@@ -227,20 +286,12 @@ function extractJsonObject(content: string): Result<unknown> {
   }
 }
 
-/** Analyse UNE image et renvoie le planning qu'elle contient. */
-export async function extractFromImage(
-  imageDataUrl: string,
-  context: PromptContext,
+/** Un appel d'extraction complet avec un modele donne, reponse validee. */
+async function runExtraction(
   options: ChatOptions,
+  prompt: string,
+  imageDataUrl: string,
 ): Promise<Result<CleanExtraction>> {
-  if (options.apiKey.trim().length === 0) {
-    return Err(appError('MISSING_API_KEY', 'Aucune clé API Groq enregistrée.', {
-      hint: 'Ouvre Réglages et colle ta clé (console.groq.com/keys).',
-    }));
-  }
-
-  const prompt = `${buildSystemPrompt()}\n\n---\n\n${buildUserPrompt(context)}`;
-
   let response = await postChat(options, prompt, imageDataUrl, true);
   if (!response.ok && isJsonModeUnsupported(response.error)) {
     // Ce modele ne gere pas le mode JSON : on reessaie sans, le parseur
@@ -261,6 +312,58 @@ export async function extractFromImage(
   }
 
   return Ok(normalizeExtraction(parsed.data));
+}
+
+export interface VisionExtraction {
+  readonly extraction: CleanExtraction;
+  /**
+   * Modele reellement utilise. Differe de celui demande quand un repli
+   * automatique a eu lieu ; l'appelant doit alors l'enregistrer.
+   */
+  readonly modelUsed: string;
+}
+
+/**
+ * Analyse UNE image et renvoie le planning qu'elle contient.
+ *
+ * Si le modele enregistre a disparu du catalogue Groq — ce qui arrive, les
+ * modeles etant retires regulierement — on interroge le catalogue du compte,
+ * on choisit le meilleur candidat vision et on reessaie une fois. Sans ce
+ * repli, l'application resterait definitivement cassee jusqu'a ce que
+ * quelqu'un change une constante dans le code.
+ */
+export async function extractFromImage(
+  imageDataUrl: string,
+  context: PromptContext,
+  options: ChatOptions,
+): Promise<Result<VisionExtraction>> {
+  if (options.apiKey.trim().length === 0) {
+    return Err(appError('MISSING_API_KEY', 'Aucune clé API Groq enregistrée.', {
+      hint: 'Ouvre Réglages et colle ta clé (console.groq.com/keys).',
+    }));
+  }
+
+  const prompt = `${buildSystemPrompt()}\n\n---\n\n${buildUserPrompt(context)}`;
+
+  const first = await runExtraction(options, prompt, imageDataUrl);
+  if (first.ok) return Ok({ extraction: first.value, modelUsed: options.model });
+  if (first.error.code !== 'MODEL_NOT_FOUND') return first;
+
+  const replacement = await pickReplacementModel(options);
+  // Aucun remplacant : on remonte l'erreur d'origine, qui nomme le modele
+  // manquant et reste donc plus utile qu'un echec de decouverte.
+  if (replacement === null) return first;
+
+  const retry = await runExtraction({ ...options, model: replacement }, prompt, imageDataUrl);
+  return retry.ok ? Ok({ extraction: retry.value, modelUsed: replacement }) : retry;
+}
+
+/** Meilleur modele vision disponible, hors celui qui vient d'echouer. */
+async function pickReplacementModel(options: ChatOptions): Promise<string | null> {
+  const catalog = await listModels(options.apiKey, options.proxyUrl, options.signal);
+  if (!catalog.ok) return null;
+  return rankVisionModels(catalog.value.map((model) => model.id))
+    .find((id) => id !== options.model) ?? null;
 }
 
 export interface GroqModel {
